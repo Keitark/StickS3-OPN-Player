@@ -1,4 +1,7 @@
 # M5StickS3 FM Player (VGM)
+![License](https://img.shields.io/github/license/Keitark/StickS3-OPN-Player)
+![Platform](https://img.shields.io/badge/platform-PlatformIO-orange)
+![Board](https://img.shields.io/badge/board-M5StickS3-blue)
 
 ## 概要
 本リポジトリは ESP32-S3 の M5Stack デバイス向けファームウェアです。LittleFS に保存した VGM/VGZ トラックを再生し、簡易 UI（スペクトラム・チップメーターなど）を表示します。PlatformIO の環境は `m5sticks3`（board: `m5stack-stamps3`）で、Arduino フレームワークを使用します。対応フォーマットは単一チップの YM2203 (OPN) の VGM/VGZ のみです。

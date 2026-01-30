@@ -1,4 +1,7 @@
 # M5StickS3 FM Player (VGM)
+![License](https://img.shields.io/github/license/Keitark/StickS3-OPN-Player)
+![Platform](https://img.shields.io/badge/platform-PlatformIO-orange)
+![Board](https://img.shields.io/badge/board-M5StickS3-blue)
 
 ## Overview
 This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/VGZ tracks from LittleFS and renders a simple UI with spectrum and chip meters. The target PlatformIO environment is `m5sticks3` (board: `m5stack-stamps3`) using the Arduino framework. Only single-chip YM2203 (OPN) VGM/VGZ files are supported.
