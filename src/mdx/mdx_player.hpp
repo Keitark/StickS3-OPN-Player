@@ -28,6 +28,8 @@ public:
   void stop();
 
   bool playing() const { return playing_; }
+  bool pdx_loaded() const { return pdx_loaded_; }
+  uint8_t pcm_mask() const;
   void render_mono(int16_t* dst, int n);
   const std::string& title() const { return title_; }
 

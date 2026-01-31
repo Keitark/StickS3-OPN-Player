@@ -216,3 +216,14 @@ void MDXPlayer::render_mono(int16_t* dst, int n) {
 
   for (int i = offset; i < n; ++i) dst[i] = 0;
 }
+
+uint8_t MDXPlayer::pcm_mask() const {
+  if (!pdx_loaded_) return 0;
+  uint8_t mask = 0;
+  for (int i = 8; i < 16; ++i) {
+    if (driver_.tracks[i].used && driver_.tracks[i].note >= 0) {
+      mask |= (uint8_t)(1u << (i - 8));
+    }
+  }
+  return mask;
+}

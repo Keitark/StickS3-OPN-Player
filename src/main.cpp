@@ -293,6 +293,13 @@ void loop() {
   if (now - last_ui >= UI_FPS_MS) {
     last_ui = now;
     if (is_mdx) {
+      bool pcm = mdx_player.pdx_loaded();
+      opm_state.set_pcm_enabled(pcm);
+      if (pcm) {
+        opm_state.set_pcm_mask(mdx_player.pcm_mask());
+      } else {
+        opm_state.set_pcm_mask(0);
+      }
       opm_state.update(now);
     } else {
       opn_state.update(now);
