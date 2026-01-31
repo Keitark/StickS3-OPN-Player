@@ -25,7 +25,6 @@ constexpr int      VOLUME_STEP     = 5;
 constexpr uint32_t VOLUME_REPEAT_MS = 120;
 constexpr uint32_t VOLUME_SHOW_MS   = 1500;
 
-constexpr int PARTS = 6;     // FM1..3 + SSG A..C
 constexpr int SPEC_COLS = 32;
 
 // UI layout/timing

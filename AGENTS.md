@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/` has the firmware entry (`main.cpp`) and modules under `audio/`, `dsp/`, `opn/`, `ui/`, and `vgm/`.
+- `src/` has the firmware entry (`main.cpp`) and modules under `audio/`, `common/`, `dsp/`, `mdx/`, `opm/`, `opn/`, `ui/`, and `vgm/`.
 - `data/` stores LittleFS assets (for example `.vgm`/`.vgz` tracks) uploaded to the device filesystem.
 - `lib/` is optional for local libraries; YMFM is pulled via `lib_deps` in `platformio.ini`.
 - `platformio.ini` defines the `env:m5sticks3` PlatformIO config; `.pio/` and most `.vscode/` files are generated.

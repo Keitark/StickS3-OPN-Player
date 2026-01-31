@@ -4,11 +4,12 @@
 ![Board](https://img.shields.io/badge/board-M5StickS3-blue)
 
 ## Overview
-This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/VGZ tracks from LittleFS and renders a simple UI with spectrum and chip meters. The target PlatformIO environment is `m5sticks3` (board: `m5stack-stamps3`) using the Arduino framework. Only single-chip YM2203 (OPN) VGM/VGZ files are supported.
+This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/VGZ (YM2203/OPN) and MDX (YM2151/OPM) tracks from LittleFS and renders a simple UI with spectrum and chip meters. The target PlatformIO environment is `m5sticks3` (board: `m5stack-stamps3`) using the Arduino framework. MDX playback is OPM-only (no PDX/ADPCM).
 
 ## Features
 - YM2203 (OPN) playback via the YMFM emulator.
-- LittleFS track browser for `.vgm`/`.vgz` files.
+- YM2151 (OPM) MDX playback (no PDX/ADPCM).
+- LittleFS track browser for `.vgm`/`.vgz`/`.mdx` files.
 - On-device UI: track title, spectrum, and chip activity meters.
 - Button controls for previous/next and volume (on-screen volume indicator while adjusting).
 
@@ -17,7 +18,7 @@ This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/
 - PlatformIO CLI (`pio`).
 
 ## Quick Start
-1) Put VGM/VGZ files in `data/`.
+1) Put VGM/VGZ/MDX files in `data/`.
 2) Build and flash firmware:
 
 ```bash
@@ -50,11 +51,12 @@ pio device monitor -b 115200
 
 ## Project Structure
 - `src/`: firmware sources (entry: `main.cpp`)
-- `src/audio`, `src/dsp`, `src/opn`, `src/ui`, `src/vgm`: feature modules
+- `src/audio`, `src/common`, `src/dsp`, `src/mdx`, `src/opm`, `src/opn`, `src/ui`, `src/vgm`: feature modules
 - `data/`: LittleFS assets (tracks)
 - `lib/`: optional local libraries (not required for YMFM; fetched via PlatformIO).
 
 ## License Notes (Assessment)
 - YMFM is BSD 3-Clause (fetched via PlatformIO). Keep its copyright and license text in source/binary distributions.
 - PlatformIO dependencies `M5Unified` and `M5GFX` are MIT-licensed; `M5GFX` bundles Adafruit GFX fonts under a BSD-style license. If you distribute binaries, include their notices.
+- MDX playback pulls `mdxtools` (GPL-3.0) via PlatformIO. If you distribute firmware built with it, GPL obligations apply.
 - Track files in `data/` may be copyrighted. Only distribute audio assets you have rights to.

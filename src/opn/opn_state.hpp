@@ -1,12 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <array>
-
-struct OPNMeters {
-  std::array<float, 6> val{};
-  std::array<float, 6> peak{};
-  std::array<float, 6> hold{};
-};
+#include "../common/meter_state.hpp"
 
 class OPNState {
 public:
@@ -14,7 +8,7 @@ public:
   void on_write(uint8_t reg, uint8_t data);
   void update(uint32_t now_ms);
 
-  const OPNMeters& meters() const { return meters_; }
+  const MeterState& meters() const { return meters_; }
 
 private:
   uint8_t reg_[256]{};
@@ -29,7 +23,7 @@ private:
   uint32_t ssg_kick_until_ms_[3]{};
 
   // meters
-  OPNMeters meters_{};
+  MeterState meters_{};
   uint32_t hold_ms_[6]{};
 
   // helpers

@@ -1,6 +1,7 @@
 #include <M5Unified.h>
 #include <LittleFS.h>
 #include <string>
+#include <string.h>
 
 #include "app_config.hpp"
 
@@ -9,23 +10,30 @@
 #include "vgm/vgm_player.hpp"
 
 #include "opn/opn_state.hpp"
+#include "opm/opm_state.hpp"
 #include "dsp/spectrum.hpp"
 #include "ui/ui_renderer.hpp"
 
 #include "audio/audio_engine.hpp"
 #include "ym2203_wrap.hpp"
+#include "mdx/mdx_blob.hpp"
+#include "mdx/mdx_player.hpp"
 
 // ===================== Globals =====================
 static TrackManager tracks;
 static VGMBlob blob;
 static VGMPlayer player;
+static MDXBlob mdx_blob;
+static MDXPlayer mdx_player;
 
 static OPNState opn_state;
+static OPMState opm_state;
 static Spectrum spec;
 static UIRenderer ui;
 
 static AudioEngine audio;
 static YM2203Wrap* chip = nullptr;
+static bool is_mdx = false;
 
 static uint32_t last_ui = 0;
 static int volume = VOLUME_DEFAULT;
@@ -40,10 +48,34 @@ static uint32_t rs_frac = 0;
 static int16_t  rs_last = 0;
 
 // ===================== Helpers =====================
+static bool ends_with_i(const std::string& s, const char* suf) {
+  size_t a = s.size();
+  size_t b = strlen(suf);
+  if (a < b) return false;
+  return strcasecmp(s.c_str() + (a - b), suf) == 0;
+}
+
 static bool load_current_track() {
   if (tracks.empty()) return false;
 
   const std::string& path = tracks.current();
+  if (ends_with_i(path, ".mdx")) {
+    is_mdx = true;
+    blob.clear();
+    delete chip;
+    chip = nullptr;
+
+    if (!mdx_blob.load_from_file(path.c_str())) return false;
+    opm_state.reset();
+    spec.reset();
+    mdx_player.stop();
+    if (!mdx_player.load(mdx_blob.data(), mdx_blob.size(), opm_state)) return false;
+    return true;
+  }
+
+  is_mdx = false;
+  mdx_blob.clear();
+  mdx_player.stop();
   if (!blob.load_from_file(path.c_str())) return false;
 
   const uint8_t* d = blob.data();
@@ -92,6 +124,19 @@ static void init_resampler() {
 }
 
 static void fill_audio_block(int16_t* dst, int n) {
+  if (is_mdx) {
+    if (!mdx_player.playing()) {
+      for (int i=0;i<n;i++) dst[i]=0;
+    } else {
+      mdx_player.render_mono(dst, n);
+    }
+    uint32_t now = millis();
+    opm_state.update(now);
+    spec.push_pcm_block(dst, n);
+    spec.update(now);
+    return;
+  }
+
   if (!chip || !player.playing()) {
     for (int i=0;i<n;i++) dst[i]=0;
     uint32_t now = millis();
@@ -150,9 +195,12 @@ void setup() {
     Serial.println("LittleFS.begin failed");
   }
 
+  opn_state.reset();
+  opm_state.reset();
+
   tracks.scan();
   if (tracks.empty()) {
-    Serial.println("No .vgm/.vgz in LittleFS root");
+    Serial.println("No .vgm/.vgz/.mdx in LittleFS root");
   } else {
     bool ok = load_current_track();
     Serial.printf("load_current_track=%d (%s)\n", ok ? 1 : 0, tracks.current().c_str());
@@ -205,14 +253,20 @@ void loop() {
   // UI 30fps
   if (now - last_ui >= UI_FPS_MS) {
     last_ui = now;
-    std::string title = blob.gd3_track_name_en();
-    if (title.empty()) title = blob.gd3_track_name_jp();
-    if (title.empty()) title = tracks.empty() ? std::string("(no track)") : tracks.current();  // fallback
+    std::string title;
+    if (is_mdx) {
+      title = mdx_player.title();
+    } else {
+      title = blob.gd3_track_name_en();
+      if (title.empty()) title = blob.gd3_track_name_jp();
+    }
+    if (title.empty()) title = tracks.empty() ? std::string("(no track)") : tracks.current();
 
+    const MeterState& meters = is_mdx ? opm_state.meters() : opn_state.meters();
     bool show_vol = (last_vol_show != 0) && ((now - last_vol_show) <= VOLUME_SHOW_MS);
     ui.draw(now,
             spec.state(),
-            opn_state.meters(),
+            meters,
             title,
             player.writes(),
             player.position(),
