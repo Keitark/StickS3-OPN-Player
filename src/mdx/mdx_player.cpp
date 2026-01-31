@@ -28,6 +28,7 @@ void MDXPlayer::reset_internal_() {
   timer_ = {};
   adpcm_ = {};
   opm_ = {};
+  reset_pcm_();
 }
 
 void MDXPlayer::opm_write_(fm_opm_driver* driver, uint8_t reg, uint8_t val) {
@@ -158,7 +159,13 @@ bool MDXPlayer::load(uint8_t* data, size_t size, OPMState& state, const char* md
     load_pdx_(mdx_path);
   }
 
-  adpcm_driver_init(&adpcm_);
+  adpcm_.owner = this;
+  adpcm_driver_init(&adpcm_.driver);
+  adpcm_.driver.play = adpcm_play_;
+  adpcm_.driver.stop = adpcm_stop_;
+  adpcm_.driver.set_volume = adpcm_set_volume_;
+  adpcm_.driver.set_freq = adpcm_set_freq_;
+  adpcm_.driver.set_pan = adpcm_set_pan_;
   pcm_timer_driver_init(&timer_, MDX_RENDER_SR);
 
   opm_.state = &state;
@@ -167,7 +174,7 @@ bool MDXPlayer::load(uint8_t* data, size_t size, OPMState& state, const char* md
   opm_.fm.write = opm_write_;
   fm_opm_driver_init(&opm_.fm, nullptr);
 
-  mdx_driver_init(&driver_, &timer_.timer_driver, &opm_.fm.fm_driver, &adpcm_);
+  mdx_driver_init(&driver_, &timer_.timer_driver, &opm_.fm.fm_driver, &adpcm_.driver);
   struct pdx_file* pdx_ptr = pdx_loaded_ ? &pdx_ : nullptr;
   if (mdx_driver_load(&driver_, &mdx_, pdx_ptr) != 0) return false;
 
@@ -198,6 +205,9 @@ void MDXPlayer::render_mono(int16_t* dst, int n) {
 
     for (int i = 0; i < chunk; ++i) {
       int32_t mono = (bufL_[i] + bufR_[i]) / 2;
+      if (pdx_loaded_) {
+        mono += mix_pcm_sample_();
+      }
       if (mono > 32767) mono = 32767;
       if (mono < -32768) mono = -32768;
       dst[offset + i] = (int16_t)mono;
@@ -226,4 +236,119 @@ uint8_t MDXPlayer::pcm_mask() const {
     }
   }
   return mask;
+}
+
+void MDXPlayer::reset_pcm_() {
+  for (auto& ch : pcm_channels_) {
+    ch = {};
+  }
+}
+
+const pdx_sample* MDXPlayer::find_pdx_sample_(uint8_t* data, int len) const {
+  if (!pdx_loaded_ || !data || len <= 0) return nullptr;
+  for (int i = 0; i < PDX_NUM_SAMPLES; ++i) {
+    if (pdx_.samples[i].data == data && pdx_.samples[i].len == len) {
+      return &pdx_.samples[i];
+    }
+  }
+  return nullptr;
+}
+
+uint32_t MDXPlayer::adpcm_step_from_freq_(uint8_t freq) const {
+  static const uint16_t rates[] = { 3900, 5200, 7800, 10400, 15600 };
+  uint8_t idx = freq;
+  if (idx >= 0x80) idx = (uint8_t)(idx & 0x7F);
+  if (idx >= (sizeof(rates) / sizeof(rates[0]))) idx = 4;
+  uint32_t rate = rates[idx];
+  if (rate == 0) rate = 15600;
+  return (uint32_t)(((uint64_t)rate << 16) / MDX_RENDER_SR);
+}
+
+uint8_t MDXPlayer::normalize_adpcm_volume_(uint8_t vol) const {
+  if (vol <= 0x0F) return vol;
+  static const uint8_t pcm_vol_table[] = {
+    0x0f, 0x0f, 0x0f, 0x0e, 0x0e, 0x0e, 0x0d, 0x0d,
+    0x0d, 0x0c, 0x0c, 0x0b, 0x0b, 0x0b, 0x0a, 0x0a,
+    0x0a, 0x09, 0x09, 0x08, 0x08, 0x08, 0x07, 0x07,
+    0x07, 0x06, 0x06, 0x05, 0x05, 0x05, 0x04, 0x04,
+    0x04, 0x03, 0x03, 0x02, 0x02, 0x02, 0x01, 0x01,
+    0x01, 0x00, 0x00
+  };
+  if (vol < sizeof(pcm_vol_table)) return pcm_vol_table[vol];
+  return 0;
+}
+
+int MDXPlayer::adpcm_play_(adpcm_driver* d, uint8_t channel, uint8_t* data, int len, uint8_t freq, uint8_t vol) {
+  auto* ctx = reinterpret_cast<ADPCMDriverCtx*>(d);
+  if (!ctx || !ctx->owner || channel >= 8) return 0;
+  MDXPlayer* self = ctx->owner;
+
+  const pdx_sample* sample = self->find_pdx_sample_(data, len);
+  if (!sample || !sample->decoded_data || sample->num_samples <= 0) {
+    self->pcm_channels_[channel].active = false;
+    return 0;
+  }
+
+  PCMChannel& ch = self->pcm_channels_[channel];
+  ch.samples = sample->decoded_data;
+  ch.length = sample->num_samples;
+  ch.pos_fp = 0;
+  ch.freq = freq;
+  ch.step_fp = self->adpcm_step_from_freq_(freq);
+  ch.volume = self->normalize_adpcm_volume_(vol);
+  ch.volume_scale = (uint16_t)((ch.volume * 256 + 7) / 15);
+  ch.active = true;
+  return 0;
+}
+
+int MDXPlayer::adpcm_stop_(adpcm_driver* d, uint8_t channel) {
+  auto* ctx = reinterpret_cast<ADPCMDriverCtx*>(d);
+  if (!ctx || !ctx->owner || channel >= 8) return 0;
+  ctx->owner->pcm_channels_[channel].active = false;
+  return 0;
+}
+
+int MDXPlayer::adpcm_set_volume_(adpcm_driver* d, uint8_t channel, uint8_t vol) {
+  auto* ctx = reinterpret_cast<ADPCMDriverCtx*>(d);
+  if (!ctx || !ctx->owner || channel >= 8) return 0;
+  PCMChannel& ch = ctx->owner->pcm_channels_[channel];
+  ch.volume = ctx->owner->normalize_adpcm_volume_(vol);
+  ch.volume_scale = (uint16_t)((ch.volume * 256 + 7) / 15);
+  return 0;
+}
+
+int MDXPlayer::adpcm_set_freq_(adpcm_driver* d, uint8_t channel, uint8_t freq) {
+  auto* ctx = reinterpret_cast<ADPCMDriverCtx*>(d);
+  if (!ctx || !ctx->owner || channel >= 8) return 0;
+  PCMChannel& ch = ctx->owner->pcm_channels_[channel];
+  ch.freq = freq;
+  ch.step_fp = ctx->owner->adpcm_step_from_freq_(freq);
+  return 0;
+}
+
+int MDXPlayer::adpcm_set_pan_(adpcm_driver* d, uint8_t pan) {
+  auto* ctx = reinterpret_cast<ADPCMDriverCtx*>(d);
+  if (!ctx || !ctx->owner) return 0;
+  ctx->owner->adpcm_.driver.pan = pan;
+  return 0;
+}
+
+int32_t MDXPlayer::mix_pcm_sample_() {
+  int32_t mix = 0;
+  for (auto& ch : pcm_channels_) {
+    if (!ch.active || !ch.samples || ch.length <= 0) continue;
+    uint32_t idx = ch.pos_fp >> 16;
+    if ((int)idx >= ch.length) {
+      ch.active = false;
+      continue;
+    }
+
+    int16_t s = ch.samples[idx];
+    int32_t pcm = (int32_t)s << 4;
+    pcm = (pcm * (int32_t)ch.volume_scale) >> 8;
+    mix += pcm;
+
+    ch.pos_fp += ch.step_fp;
+  }
+  return mix;
 }
