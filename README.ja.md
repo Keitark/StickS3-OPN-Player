@@ -4,11 +4,12 @@
 ![Board](https://img.shields.io/badge/board-M5StickS3-blue)
 
 ## 概要
-本リポジトリは ESP32-S3 の M5Stack デバイス向けファームウェアです。LittleFS に保存した VGM/VGZ トラックを再生し、簡易 UI（スペクトラム・チップメーターなど）を表示します。PlatformIO の環境は `m5sticks3`（board: `m5stack-stamps3`）で、Arduino フレームワークを使用します。対応フォーマットは単一チップの YM2203 (OPN) の VGM/VGZ のみです。
+本リポジトリは ESP32-S3 の M5Stack デバイス向けファームウェアです。LittleFS に保存した VGM/VGZ（YM2203/OPN）および MDX（YM2151/OPM）トラックを再生し、簡易 UI（スペクトラム・チップメーターなど）を表示します。PlatformIO の環境は `m5sticks3`（board: `m5stack-stamps3`）で、Arduino フレームワークを使用します。MDX は OPM のみ対応（PDX/ADPCM なし）です。
 
 ## 特長
 - YMFM エミュレータによる YM2203 (OPN) 再生
-- LittleFS の `.vgm` / `.vgz` をスキャンして再生
+- YM2151 (OPM) の MDX 再生（PDX/ADPCM なし）
+- LittleFS の `.vgm` / `.vgz` / `.mdx` をスキャンして再生
 - 画面にトラック名、スペクトラム、チップ活動量を表示
 - ボタン操作で前後・音量調整（調整中は音量を表示）
 
@@ -17,7 +18,7 @@
 - PlatformIO CLI (`pio`)
 
 ## クイックスタート
-1) `data/` に VGM/VGZ を配置します。
+1) `data/` に VGM/VGZ/MDX を配置します。
 2) ビルド & フラッシュ:
 
 ```bash
@@ -50,11 +51,12 @@ pio device monitor -b 115200
 
 ## プロジェクト構成
 - `src/`: ファームのソース（エントリ: `main.cpp`）
-- `src/audio`, `src/dsp`, `src/opn`, `src/ui`, `src/vgm`: 機能別モジュール
+- `src/audio`, `src/common`, `src/dsp`, `src/mdx`, `src/opm`, `src/opn`, `src/ui`, `src/vgm`: 機能別モジュール
 - `data/`: LittleFS 用データ（トラック）
 - `lib/`: ローカルライブラリ（YMFM は PlatformIO で取得）
 
 ## ライセンスに関する注意
 - YMFM は BSD 3-Clause（PlatformIO で取得）。ソース/バイナリ配布時はライセンス表記が必要です。
 - `M5Unified` / `M5GFX` は MIT、`M5GFX` の一部フォントは BSD ライセンスです。バイナリ配布時はそれぞれの表記が必要です。
+- MDX 再生は PlatformIO 経由で `mdxtools`（GPL-3.0）を取得します。これを含むバイナリを配布する場合は GPL 条件に従ってください。
 - `data/` 内の音源は著作権物の可能性があります。配布する場合は権利を確認してください。

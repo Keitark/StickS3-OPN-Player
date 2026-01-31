@@ -17,6 +17,7 @@ void OPNState::reset() {
   memset(ssg_prev_active_, 0, sizeof(ssg_prev_active_));
   memset(ssg_kick_until_ms_, 0, sizeof(ssg_kick_until_ms_));
   meters_ = {};
+  meters_.count = 6;
   memset(hold_ms_, 0, sizeof(hold_ms_));
 }
 

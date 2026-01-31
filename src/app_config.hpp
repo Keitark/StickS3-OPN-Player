@@ -5,11 +5,14 @@
 constexpr uint32_t OUT_SR = 44100;
 constexpr size_t   AUDIO_BLOCK_SAMPLES = 1024;
 constexpr uint8_t  AUDIO_CHANNEL = 0;
+// MDX render rate (lower than OUT_SR to reduce YM2151 CPU load)
+constexpr uint32_t MDX_RENDER_SR = 22050;
+constexpr size_t   MDX_RENDER_BLOCK_SAMPLES = 256;
 
 // Audio buffering (ms / us)
-constexpr int32_t  AUDIO_TARGET_BUFFER_MS = 400;
-constexpr int32_t  AUDIO_MIN_BUFFER_MS    = 250;
-constexpr uint32_t AUDIO_PUMP_BUDGET_US   = 4000;
+constexpr int32_t  AUDIO_TARGET_BUFFER_MS = 500;
+constexpr int32_t  AUDIO_MIN_BUFFER_MS    = 300;
+constexpr uint32_t AUDIO_PUMP_BUDGET_US   = 12000;
 
 // Speaker config
 constexpr uint16_t SPEAKER_DMA_BUF_LEN   = 1024;
@@ -25,11 +28,10 @@ constexpr int      VOLUME_STEP     = 5;
 constexpr uint32_t VOLUME_REPEAT_MS = 120;
 constexpr uint32_t VOLUME_SHOW_MS   = 1500;
 
-constexpr int PARTS = 6;     // FM1..3 + SSG A..C
 constexpr int SPEC_COLS = 32;
 
 // UI layout/timing
-constexpr uint32_t UI_FPS_MS = 33;  // 10fps
+constexpr uint32_t UI_FPS_MS = 33;  // 30fps
 constexpr int UI_HEADER_H = 16;
 constexpr int UI_GAP = 4;
 constexpr int UI_SPEC_H = 78;

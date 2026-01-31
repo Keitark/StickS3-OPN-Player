@@ -4,7 +4,7 @@
 
 class TrackManager {
 public:
-  bool scan();                 // LittleFS rootから .vgm/.vgz を列挙
+  bool scan();                 // LittleFS rootから .vgm/.vgz/.mdx を列挙
   bool empty() const { return tracks_.empty(); }
 
   const std::string& current() const { return tracks_[idx_]; }

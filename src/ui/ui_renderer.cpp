@@ -1,6 +1,6 @@
 #include "ui_renderer.hpp"
 #include "../dsp/spectrum.hpp"
-#include "../opn/opn_state.hpp"
+#include "../common/meter_state.hpp"
 #include "../app_config.hpp"
 
 static inline float clamp01(float x){ return x<0?0:(x>1?1:x); }
@@ -73,7 +73,7 @@ void UIRenderer::draw_segment_bar_v_(int x,int y,int w,int h,float v,float p,flo
 
 void UIRenderer::draw(uint32_t now_ms,
                       const SpectrumState& spec,
-                      const OPNMeters& meters,
+                      const MeterState& meters,
                       const std::string& track_name,
                       uint32_t wr_count,
                       uint32_t pos,
@@ -286,12 +286,18 @@ canvas_.clearClipRect();
   int inH = ph - 2;
 
   int gapX = 6;
-  int barW = (inW - gapX*(PARTS-1)) / PARTS;
+  int parts = meters.count > 0 ? meters.count : 1;
+  int barW = (inW - gapX*(parts-1)) / parts;
   if(barW < 10) barW = 10;
 
-  const char* lab[6]={"FM1","FM2","FM3","SSG1","SSG2","SSG3"};
+  const char* lab6[6]={"FM1","FM2","FM3","SSG1","SSG2","SSG3"};
+  const char* lab8[8]={"FM1","FM2","FM3","FM4","FM5","FM6","FM7","FM8"};
+  const char* const* lab = (parts == 8) ? lab8 : lab6;
+  int label_count = (parts == 8) ? 8 : 6;
+  int draw_parts = parts;
+  if (draw_parts > label_count) draw_parts = label_count;
 
-  for(int i=0;i<PARTS;i++){
+  for(int i=0;i<draw_parts;i++){
     int bx = inX + i*(barW + gapX);
     int by = inY;
     int bh = inH - 12;

@@ -20,7 +20,7 @@ bool TrackManager::scan() {
   while (f) {
     if (!f.isDirectory()) {
       const char* name = f.name();
-      if (has_ext(name, ".vgm") || has_ext(name, ".vgz")) {
+      if (has_ext(name, ".vgm") || has_ext(name, ".vgz") || has_ext(name, ".mdx")) {
         std::string p = name;
         if (!p.empty() && p[0] != '/') p = "/" + p;
         tracks_.push_back(p);

@@ -4,7 +4,7 @@
 #include <M5Unified.h>
 
 struct SpectrumState;
-struct OPNMeters;
+#include "../common/meter_state.hpp"
 
 inline constexpr uint16_t ui_rgb565(uint8_t r, uint8_t g, uint8_t b) {
   return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
@@ -17,7 +17,7 @@ public:
 
   void draw(uint32_t now_ms,
             const SpectrumState& spec,
-            const OPNMeters& meters,
+            const MeterState& meters,
             const std::string& track_name,
             uint32_t wr_count,
             uint32_t pos,
