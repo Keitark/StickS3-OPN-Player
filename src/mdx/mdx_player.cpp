@@ -9,6 +9,8 @@ static bool ieq_str(const std::string& a, const std::string& b) {
   return strcasecmp(a.c_str(), b.c_str()) == 0;
 }
 
+#define MDX_DEBUG_KEYON 1
+
 MDXPlayer::MDXPlayer() = default;
 
 void MDXPlayer::reset_internal_() {
@@ -45,6 +47,17 @@ void MDXPlayer::opm_write_(fm_opm_driver* driver, uint8_t reg, uint8_t val) {
   if (ctx->state) {
     ctx->state->on_write(reg, val);
   }
+#if MDX_DEBUG_KEYON
+  if (reg == 0x08 && (val & 0x78) != 0) {
+    static uint32_t s_count = 0;
+    if (s_count < 32) {
+      uint8_t ch = val & 0x07;
+      uint8_t mask = (val >> 3) & 0x0F;
+      Serial.printf("MDX KEYON t=%lu ch=%u mask=%u\n", (unsigned long)millis(), ch, mask);
+      s_count++;
+    }
+  }
+#endif
 }
 
 void* MDXPlayer::ps_alloc_(size_t n) {
@@ -82,6 +95,28 @@ std::string MDXPlayer::resolve_pdx_path_(const char* mdx_path) const {
     pdx_with_ext += ".PDX";
   }
 
+  File root = LittleFS.open(dir.c_str(), "r");
+  if (root) {
+    File f = root.openNextFile();
+    while (f) {
+      if (!f.isDirectory()) {
+        std::string name = f.name();
+        std::string base_name = name;
+        auto pos = base_name.find_last_of('/');
+        if (pos != std::string::npos) base_name = base_name.substr(pos + 1);
+
+        if (ieq_str(base_name, pdx_name) || ieq_str(base_name, pdx_with_ext) ||
+            (pdx_name.find('.') == std::string::npos && ieq_str(base_name, pdx_name + ".pdx"))) {
+          if (!name.empty() && name[0] != '/') {
+            return dir + name;
+          }
+          return name;
+        }
+      }
+      f = root.openNextFile();
+    }
+  }
+
   auto try_path = [&](const std::string& name) -> std::string {
     std::string path = dir + name;
     if (LittleFS.exists(path.c_str())) return path;
@@ -96,27 +131,6 @@ std::string MDXPlayer::resolve_pdx_path_(const char* mdx_path) const {
   if (pdx_name.find('.') == std::string::npos) {
     path = try_path(pdx_name + ".pdx");
     if (!path.empty()) return path;
-  }
-
-  File root = LittleFS.open(dir.c_str(), "r");
-  if (!root) return {};
-  File f = root.openNextFile();
-  while (f) {
-    if (!f.isDirectory()) {
-      std::string name = f.name();
-      std::string base_name = name;
-      auto pos = base_name.find_last_of('/');
-      if (pos != std::string::npos) base_name = base_name.substr(pos + 1);
-
-      if (ieq_str(base_name, pdx_name) || ieq_str(base_name, pdx_with_ext) ||
-          (pdx_name.find('.') == std::string::npos && ieq_str(base_name, pdx_name + ".pdx"))) {
-        if (!name.empty() && name[0] != '/') {
-          return dir + name;
-        }
-        return name;
-      }
-    }
-    f = root.openNextFile();
   }
 
   return {};
