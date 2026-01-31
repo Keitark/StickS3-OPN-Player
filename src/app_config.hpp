@@ -5,6 +5,9 @@
 constexpr uint32_t OUT_SR = 44100;
 constexpr size_t   AUDIO_BLOCK_SAMPLES = 1024;
 constexpr uint8_t  AUDIO_CHANNEL = 0;
+// MDX render rate (lower than OUT_SR to reduce YM2151 CPU load)
+constexpr uint32_t MDX_RENDER_SR = 22050;
+constexpr size_t   MDX_RENDER_BLOCK_SAMPLES = 256;
 
 // Audio buffering (ms / us)
 constexpr int32_t  AUDIO_TARGET_BUFFER_MS = 500;

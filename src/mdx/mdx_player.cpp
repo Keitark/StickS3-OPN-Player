@@ -37,10 +37,10 @@ bool MDXPlayer::load(uint8_t* data, size_t size, OPMState& state) {
   title_.assign(reinterpret_cast<const char*>(mdx_.title), mdx_.title_len);
 
   adpcm_driver_init(&adpcm_);
-  pcm_timer_driver_init(&timer_, OUT_SR);
+  pcm_timer_driver_init(&timer_, MDX_RENDER_SR);
 
   opm_.state = &state;
-  ym2151_init(&opm_.opm, OPM_CLOCK, OUT_SR);
+  ym2151_init(&opm_.opm, OPM_CLOCK, MDX_RENDER_SR);
   ym2151_reset_chip(&opm_.opm);
   opm_.fm.write = opm_write_;
   fm_opm_driver_init(&opm_.fm, nullptr);
