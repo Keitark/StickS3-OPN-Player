@@ -303,7 +303,7 @@ canvas_.clearClipRect();
 
   const char* lab6[6]={"FM1","FM2","FM3","SSG1","SSG2","SSG3"};
   const char* lab8[8]={"FM1","FM2","FM3","FM4","FM5","FM6","FM7","FM8"};
-  const char* labpcm[8]={"PCM8","PCM9","PCM10","PCM11","PCM12","PCM13","PCM14","PCM15"};
+  const char* labpcm[8]={"P08","P09","P10","P11","P12","P13","P14","P15"};
 
   for (int row = 0; row < rowCount; ++row) {
     int base = row * 8;
