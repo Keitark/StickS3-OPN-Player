@@ -80,7 +80,7 @@ static bool load_current_track() {
     opm_state.reset();
     spec.reset();
     mdx_player.stop();
-    if (!mdx_player.load(mdx_blob.data(), mdx_blob.size(), opm_state)) return false;
+    if (!mdx_player.load(mdx_blob.data(), mdx_blob.size(), opm_state, path.c_str())) return false;
     mdx_buf_pos = 0;
     mdx_buf_len = 0;
     mdx_rs_step_fp = (uint32_t)(((uint64_t)MDX_RENDER_SR << 16) / OUT_SR);

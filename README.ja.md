@@ -4,11 +4,11 @@
 ![Board](https://img.shields.io/badge/board-M5StickS3-blue)
 
 ## 概要
-本リポジトリは ESP32-S3 の M5Stack デバイス向けファームウェアです。LittleFS に保存した VGM/VGZ（YM2203/OPN）および MDX（YM2151/OPM）トラックを再生し、簡易 UI（スペクトラム・チップメーターなど）を表示します。PlatformIO の環境は `m5sticks3`（board: `m5stack-stamps3`）で、Arduino フレームワークを使用します。MDX は OPM のみ対応（PDX/ADPCM なし）です。
+本リポジトリは ESP32-S3 の M5Stack デバイス向けファームウェアです。LittleFS に保存した VGM/VGZ（YM2203/OPN）および MDX（YM2151/OPM）トラックを再生し、簡易 UI（スペクトラム・チップメーターなど）を表示します。PlatformIO の環境は `m5sticks3`（board: `m5stack-stamps3`）で、Arduino フレームワークを使用します。MDX は対応する PDX があれば PDX/ADPCM を再生します。
 
 ## 特長
 - YMFM エミュレータによる YM2203 (OPN) 再生
-- YM2151 (OPM) の MDX 再生（PDX/ADPCM なし）
+- YM2151 (OPM) の MDX 再生（対応する PDX があれば PDX/ADPCM も再生）
 - LittleFS の `.vgm` / `.vgz` / `.mdx` をスキャンして再生
 - 画面にトラック名、スペクトラム、チップ活動量を表示
 - ボタン操作で前後・音量調整（調整中は音量を表示）

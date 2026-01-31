@@ -4,11 +4,11 @@
 ![Board](https://img.shields.io/badge/board-M5StickS3-blue)
 
 ## Overview
-This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/VGZ (YM2203/OPN) and MDX (YM2151/OPM) tracks from LittleFS and renders a simple UI with spectrum and chip meters. The target PlatformIO environment is `m5sticks3` (board: `m5stack-stamps3`) using the Arduino framework. MDX playback is OPM-only (no PDX/ADPCM).
+This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/VGZ (YM2203/OPN) and MDX (YM2151/OPM) tracks from LittleFS and renders a simple UI with spectrum and chip meters. The target PlatformIO environment is `m5sticks3` (board: `m5stack-stamps3`) using the Arduino framework. MDX playback supports PDX/ADPCM when the matching PDX file is present.
 
 ## Features
 - YM2203 (OPN) playback via the YMFM emulator.
-- YM2151 (OPM) MDX playback (no PDX/ADPCM).
+- YM2151 (OPM) MDX playback (PDX/ADPCM supported when PDX is available).
 - LittleFS track browser for `.vgm`/`.vgz`/`.mdx` files.
 - On-device UI: track title, spectrum, and chip activity meters.
 - Button controls for previous/next and volume (on-screen volume indicator while adjusting).
