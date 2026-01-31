@@ -7,9 +7,9 @@ constexpr size_t   AUDIO_BLOCK_SAMPLES = 1024;
 constexpr uint8_t  AUDIO_CHANNEL = 0;
 
 // Audio buffering (ms / us)
-constexpr int32_t  AUDIO_TARGET_BUFFER_MS = 400;
-constexpr int32_t  AUDIO_MIN_BUFFER_MS    = 250;
-constexpr uint32_t AUDIO_PUMP_BUDGET_US   = 4000;
+constexpr int32_t  AUDIO_TARGET_BUFFER_MS = 500;
+constexpr int32_t  AUDIO_MIN_BUFFER_MS    = 300;
+constexpr uint32_t AUDIO_PUMP_BUDGET_US   = 12000;
 
 // Speaker config
 constexpr uint16_t SPEAKER_DMA_BUF_LEN   = 1024;
@@ -28,7 +28,7 @@ constexpr uint32_t VOLUME_SHOW_MS   = 1500;
 constexpr int SPEC_COLS = 32;
 
 // UI layout/timing
-constexpr uint32_t UI_FPS_MS = 33;  // 10fps
+constexpr uint32_t UI_FPS_MS = 33;  // 30fps
 constexpr int UI_HEADER_H = 16;
 constexpr int UI_GAP = 4;
 constexpr int UI_SPEC_H = 78;

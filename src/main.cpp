@@ -130,19 +130,13 @@ static void fill_audio_block(int16_t* dst, int n) {
     } else {
       mdx_player.render_mono(dst, n);
     }
-    uint32_t now = millis();
-    opm_state.update(now);
     spec.push_pcm_block(dst, n);
-    spec.update(now);
     return;
   }
 
   if (!chip || !player.playing()) {
     for (int i=0;i<n;i++) dst[i]=0;
-    uint32_t now = millis();
-    opn_state.update(now);
     spec.push_pcm_block(dst, n);
-    spec.update(now);
     return;
   }
 
@@ -162,10 +156,7 @@ static void fill_audio_block(int16_t* dst, int n) {
     dst[i] = lerp_i16(rs_s0, rs_s1, rs_pos_fp);
   }
 
-  uint32_t now = millis();
-  opn_state.update(now);
   spec.push_pcm_block(dst, n);
-  spec.update(now);
 }
 
 
@@ -253,6 +244,12 @@ void loop() {
   // UI 30fps
   if (now - last_ui >= UI_FPS_MS) {
     last_ui = now;
+    if (is_mdx) {
+      opm_state.update(now);
+    } else {
+      opn_state.update(now);
+    }
+    spec.update(now);
     std::string title;
     if (is_mdx) {
       title = mdx_player.title();
