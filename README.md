@@ -16,6 +16,7 @@ This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/
 ## Hardware & Requirements
 - ESP32-S3 M5Stack device matching `platformio.ini` (board `m5stack-stamps3`).
 - PlatformIO CLI (`pio`).
+- Python 3.x (required by PlatformIO and build helper scripts).
 
 ## Quick Start
 1) Put VGM/VGZ/MDX files in `data/`.

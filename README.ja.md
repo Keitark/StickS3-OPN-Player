@@ -16,6 +16,7 @@
 ## ハードウェア / 必要環境
 - `platformio.ini` に対応する ESP32-S3 M5Stack デバイス（board `m5stack-stamps3`）
 - PlatformIO CLI (`pio`)
+- Python 3.x（PlatformIO とビルド補助スクリプトに必要）
 
 ## クイックスタート
 1) `data/` に VGM/VGZ/MDX を配置します。
