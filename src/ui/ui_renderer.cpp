@@ -10,6 +10,8 @@ void UIRenderer::begin(M5GFX& display) {
 
   canvas_.setColorDepth(16);
   canvas_.createSprite(display.width(), display.height());
+  canvas_.setFont(&fonts::lgfxJapanGothic_12);
+  canvas_.setTextSize(1);
   canvas_.fillScreen(COL_BG);
 
   // ★親を明示してpush
@@ -122,7 +124,7 @@ canvas_.drawRect(0, 0, W, headerH, COL_FRAME);
 canvas_.setTextWrap(false, false);
 
 // 左タイトル（末尾にスペースを入れる）
-const char* app = "StickS3 OPN Player ";   // ←スペース入り
+const char* app = "StickS3 FM Player ";   // ←スペース入り
 canvas_.setTextColor(COL_TXT, COL_PANEL);
 canvas_.setCursor(4, 3);
 canvas_.print(app);
