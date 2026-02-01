@@ -30,6 +30,14 @@ void OPMState::on_write(uint8_t reg, uint8_t data) {
   }
 }
 
+void OPMState::set_fm_keyon(uint8_t ch, bool keyon, bool kick) {
+  if (ch >= 8) return;
+  keyon_mask_[ch] = keyon ? 0x0F : 0x00;
+  if (kick) {
+    kick_until_ms_[ch] = (uint32_t)(millis() + 80);
+  }
+}
+
 void OPMState::set_pcm_enabled(bool enabled) {
   pcm_enabled_ = enabled;
   meters_.count = enabled ? 16 : 8;
@@ -55,8 +63,9 @@ void OPMState::set_pcm_mask(uint8_t mask) {
 
 void OPMState::update(uint32_t now_ms) {
   for (int i = 0; i < 8; ++i) {
-    float lv = keyon_mask_[i] ? 0.65f : 0.0f;
-    if (keyon_mask_[i] && now_ms < kick_until_ms_[i]) {
+    bool kicked = now_ms < kick_until_ms_[i];
+    float lv = (keyon_mask_[i] || kicked) ? 0.65f : 0.0f;
+    if (kicked) {
       lv = fminf(1.0f, lv + 0.20f);
     }
 

@@ -58,5 +58,5 @@ pio device monitor -b 115200
 ## ライセンスに関する注意
 - YMFM は BSD 3-Clause（PlatformIO で取得）。ソース/バイナリ配布時はライセンス表記が必要です。
 - `M5Unified` / `M5GFX` は MIT、`M5GFX` の一部フォントは BSD ライセンスです。バイナリ配布時はそれぞれの表記が必要です。
-- MDX 再生は PlatformIO 経由で `mdxtools`（GPL-3.0）を取得します。これを含むバイナリを配布する場合は GPL 条件に従ってください。
+- MDX 再生は PlatformIO 経由で `portable_mdx` を取得します。Yosshin 作成部分は Apache-2.0 ですが、MXDRVg/X68Sound 由来部分は各オリジナルの条件に従います。これを含むバイナリを配布する場合は、それらの条件に従ってください（詳細は upstream の `readme.md` を参照）。
 - `data/` 内の音源は著作権物の可能性があります。配布する場合は権利を確認してください。

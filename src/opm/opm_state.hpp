@@ -6,6 +6,7 @@ class OPMState {
 public:
   void reset();
   void on_write(uint8_t reg, uint8_t data);
+  void set_fm_keyon(uint8_t ch, bool keyon, bool kick);
   void update(uint32_t now_ms);
   void set_pcm_enabled(bool enabled);
   void set_pcm_mask(uint8_t mask);

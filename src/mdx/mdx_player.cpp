@@ -1,7 +1,10 @@
 #include "mdx_player.hpp"
+#include "../app_config.hpp"
 #include "../opm/opm_state.hpp"
 #include <Arduino.h>
 #include <LittleFS.h>
+#include <algorithm>
+#include <limits>
 #include <string.h>
 #include <stdlib.h>
 
@@ -9,55 +12,39 @@ static bool ieq_str(const std::string& a, const std::string& b) {
   return strcasecmp(a.c_str(), b.c_str()) == 0;
 }
 
-#define MDX_DEBUG_KEYON 1
+namespace {
+constexpr uint32_t kPoolMarginBytes = 512 * 1024;
+constexpr uint32_t kPoolMinBytes = 2 * 1024 * 1024;
+}  // namespace
 
 MDXPlayer::MDXPlayer() = default;
 
 void MDXPlayer::reset_internal_() {
-  if (pdx_data_) {
-    ps_free_(pdx_data_);
-    pdx_data_ = nullptr;
-    pdx_size_ = 0;
+  if (ctx_ready_) {
+    MXDRV_Stop(&ctx_);
+    MXDRV_End(&ctx_);
+    MxdrvContext_Terminate(&ctx_);
+    ctx_ready_ = false;
+    ctx_pool_size_ = 0;
   }
-  if (adpcm_mix_ready_) {
-    adpcm_pcm_mix_driver_deinit(&adpcm_);
-    free(adpcm_.decode_buf);
-    free(adpcm_.decode_resample_buf);
-    free(adpcm_.mix_buf_l);
-    free(adpcm_.mix_buf_r);
+
+  if (mdx_buffer_) {
+    ps_free_(mdx_buffer_);
+    mdx_buffer_ = nullptr;
+    mdx_buffer_size_ = 0;
   }
-  pdx_loaded_ = false;
-  adpcm_mix_ready_ = false;
-  data_ = nullptr;
-  size_ = 0;
-  title_.clear();
+  if (pdx_buffer_) {
+    ps_free_(pdx_buffer_);
+    pdx_buffer_ = nullptr;
+    pdx_buffer_size_ = 0;
+  }
+
   playing_ = false;
-
-  mdx_ = {};
-  pdx_ = {};
-  driver_ = {};
-  timer_ = {};
-  adpcm_ = {};
-  opm_ = {};
-}
-
-void MDXPlayer::opm_write_(fm_opm_driver* driver, uint8_t reg, uint8_t val) {
-  auto* ctx = reinterpret_cast<OPMEmuDriver*>(driver);
-  ym2151_write_reg(&ctx->opm, reg, val);
-  if (ctx->state) {
-    ctx->state->on_write(reg, val);
-  }
-#if MDX_DEBUG_KEYON
-  if (reg == 0x08 && (val & 0x78) != 0) {
-    static uint32_t s_count = 0;
-    if (s_count < 32) {
-      uint8_t ch = val & 0x07;
-      uint8_t mask = (val >> 3) & 0x0F;
-      Serial.printf("MDX KEYON t=%lu ch=%u mask=%u\n", (unsigned long)millis(), ch, mask);
-      s_count++;
-    }
-  }
-#endif
+  pdx_loaded_ = false;
+  pcm_mask_ = 0;
+  title_.clear();
+  opm_state_ = nullptr;
+  render_sr_ = 0;
 }
 
 void* MDXPlayer::ps_alloc_(size_t n) {
@@ -78,22 +65,15 @@ void MDXPlayer::ps_free_(void* p) {
 #endif
 }
 
-std::string MDXPlayer::resolve_pdx_path_(const char* mdx_path) const {
-  if (!mdx_.pdx_filename || mdx_.pdx_filename_len == 0 || !mdx_path) return {};
+std::string MDXPlayer::resolve_pdx_path_(const char* mdx_path, const char* pdx_name) const {
+  if (!mdx_path || !pdx_name || pdx_name[0] == '\0') return {};
 
-  std::string pdx_name(reinterpret_cast<const char*>(mdx_.pdx_filename), mdx_.pdx_filename_len);
-  auto nul = pdx_name.find('\0');
-  if (nul != std::string::npos) pdx_name.resize(nul);
-  if (pdx_name.empty()) return {};
+  std::string pdx_name_str(pdx_name);
+  if (pdx_name_str.empty()) return {};
 
   std::string base = mdx_path;
   auto slash = base.find_last_of('/');
   std::string dir = (slash == std::string::npos) ? std::string("/") : base.substr(0, slash + 1);
-
-  std::string pdx_with_ext = pdx_name;
-  if (pdx_with_ext.find('.') == std::string::npos) {
-    pdx_with_ext += ".PDX";
-  }
 
   File root = LittleFS.open(dir.c_str(), "r");
   if (root) {
@@ -105,8 +85,7 @@ std::string MDXPlayer::resolve_pdx_path_(const char* mdx_path) const {
         auto pos = base_name.find_last_of('/');
         if (pos != std::string::npos) base_name = base_name.substr(pos + 1);
 
-        if (ieq_str(base_name, pdx_name) || ieq_str(base_name, pdx_with_ext) ||
-            (pdx_name.find('.') == std::string::npos && ieq_str(base_name, pdx_name + ".pdx"))) {
+        if (ieq_str(base_name, pdx_name_str)) {
           if (!name.empty() && name[0] != '/') {
             return dir + name;
           }
@@ -117,51 +96,33 @@ std::string MDXPlayer::resolve_pdx_path_(const char* mdx_path) const {
     }
   }
 
-  auto try_path = [&](const std::string& name) -> std::string {
-    std::string path = dir + name;
-    if (LittleFS.exists(path.c_str())) return path;
-    return {};
-  };
-
-  std::string path = try_path(pdx_with_ext);
-  if (!path.empty()) return path;
-  path = try_path(pdx_name);
-  if (!path.empty()) return path;
-
-  if (pdx_name.find('.') == std::string::npos) {
-    path = try_path(pdx_name + ".pdx");
-    if (!path.empty()) return path;
-  }
+  std::string path = dir + pdx_name_str;
+  if (LittleFS.exists(path.c_str())) return path;
 
   return {};
 }
 
-bool MDXPlayer::load_pdx_(const char* mdx_path) {
-  std::string pdx_path = resolve_pdx_path_(mdx_path);
-  if (pdx_path.empty()) return false;
+bool MDXPlayer::ensure_context_(uint32_t mdx_buf_size, uint32_t pdx_buf_size, uint32_t render_sr) {
+  const uint64_t data_bytes = static_cast<uint64_t>(mdx_buf_size) + pdx_buf_size;
+  uint64_t pool64 = data_bytes * 2 + kPoolMarginBytes;
+  if (pool64 < kPoolMinBytes) pool64 = kPoolMinBytes;
+  if (pool64 > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+    pool64 = static_cast<uint64_t>(std::numeric_limits<int>::max());
+  }
+  const uint32_t pool = static_cast<uint32_t>(pool64);
+  if (!MxdrvContext_Initialize(&ctx_, (int)pool)) return false;
 
-  File f = LittleFS.open(pdx_path.c_str(), "r");
-  if (!f) return false;
-  size_t sz = (size_t)f.size();
-  if (sz == 0) return false;
-
-  pdx_data_ = (uint8_t*)ps_alloc_(sz);
-  if (!pdx_data_) return false;
-
-  if (f.read(pdx_data_, sz) != (int)sz) {
-    ps_free_(pdx_data_);
-    pdx_data_ = nullptr;
+  if (MXDRV_Start(&ctx_, (int)render_sr, 0, 0, 0, (int)mdx_buf_size, (int)pdx_buf_size, 0) != 0) {
+    MxdrvContext_Terminate(&ctx_);
     return false;
   }
 
-  if (pdx_file_load(&pdx_, pdx_data_, (int)sz) != 0) {
-    ps_free_(pdx_data_);
-    pdx_data_ = nullptr;
-    return false;
-  }
+  MXDRV_PCM8Enable(&ctx_, 1);
+  MXDRV_TotalVolume(&ctx_, 256);
 
-  pdx_size_ = sz;
-  pdx_loaded_ = true;
+  ctx_ready_ = true;
+  ctx_pool_size_ = pool;
+  render_sr_ = render_sr;
   return true;
 }
 
@@ -169,45 +130,137 @@ bool MDXPlayer::load(uint8_t* data, size_t size, OPMState& state, const char* md
   reset_internal_();
   if (!data || size < 8) return false;
 
-  data_ = data;
-  size_ = size;
+  opm_state_ = &state;
 
-  int err = mdx_file_load(&mdx_, data_, (int)size_);
-  if (err != MDX_SUCCESS) return false;
-
-  title_.assign(reinterpret_cast<const char*>(mdx_.title), mdx_.title_len);
-
-  if (mdx_.pdx_filename_len > 0) {
-    load_pdx_(mdx_path);
+  char title_buf[128] = {};
+  if (MdxGetTitle(data, (uint32_t)size, title_buf, sizeof(title_buf))) {
+    title_ = title_buf;
   }
 
-  if (pdx_loaded_) {
-    adpcm_mix_ready_ = (adpcm_pcm_mix_driver_init(&adpcm_, MDX_RENDER_SR, MDX_RENDER_BLOCK_SAMPLES) == 0);
-    if (!adpcm_mix_ready_) {
-      adpcm_driver_init(&adpcm_.adpcm_driver);
-      pdx_loaded_ = false;
+  bool has_pdx = false;
+  if (!MdxHasPdxFileName(data, (uint32_t)size, &has_pdx)) return false;
+  const uint32_t render_sr = has_pdx ? MDX_RENDER_SR_PCM : MDX_RENDER_SR_DEFAULT;
+
+  uint8_t* pdx_image = nullptr;
+  uint32_t pdx_image_size = 0;
+  if (has_pdx) {
+    char pdx_name[128] = {};
+    if (!MdxGetPdxFileName(data, (uint32_t)size, pdx_name, sizeof(pdx_name))) return false;
+
+    std::string pdx_path = resolve_pdx_path_(mdx_path, pdx_name);
+    if (pdx_path.empty()) return false;
+
+    File f = LittleFS.open(pdx_path.c_str(), "r");
+    if (!f) return false;
+    pdx_image_size = (uint32_t)f.size();
+    if (pdx_image_size == 0) return false;
+
+    pdx_image = (uint8_t*)ps_alloc_(pdx_image_size);
+    if (!pdx_image) return false;
+    if (f.read(pdx_image, pdx_image_size) != (int)pdx_image_size) {
+      ps_free_(pdx_image);
+      return false;
     }
-  } else {
-    adpcm_driver_init(&adpcm_.adpcm_driver);
   }
-  pcm_timer_driver_init(&timer_, MDX_RENDER_SR);
 
-  opm_.state = &state;
-  ym2151_init(&opm_.opm, OPM_CLOCK, MDX_RENDER_SR);
-  ym2151_reset_chip(&opm_.opm);
-  opm_.fm.write = opm_write_;
-  fm_opm_driver_init(&opm_.fm, nullptr);
+  uint32_t req_mdx = 0;
+  uint32_t req_pdx = 0;
+  if (!MdxGetRequiredBufferSize(data, (uint32_t)size, pdx_image_size, &req_mdx, &req_pdx)) {
+    if (pdx_image) ps_free_(pdx_image);
+    return false;
+  }
 
-  mdx_driver_init(&driver_, &timer_.timer_driver, &opm_.fm.fm_driver, &adpcm_.adpcm_driver);
-  struct pdx_file* pdx_ptr = pdx_loaded_ ? &pdx_ : nullptr;
-  if (mdx_driver_load(&driver_, &mdx_, pdx_ptr) != 0) return false;
+  mdx_buffer_ = (uint8_t*)ps_alloc_(req_mdx);
+  if (!mdx_buffer_) {
+    if (pdx_image) ps_free_(pdx_image);
+    return false;
+  }
+  mdx_buffer_size_ = req_mdx;
 
+  if (req_pdx > 0) {
+    pdx_buffer_ = (uint8_t*)ps_alloc_(req_pdx);
+    if (!pdx_buffer_) {
+      ps_free_(mdx_buffer_);
+      mdx_buffer_ = nullptr;
+      if (pdx_image) ps_free_(pdx_image);
+      return false;
+    }
+    pdx_buffer_size_ = req_pdx;
+  }
+
+  if (!MdxUtilCreateMdxPdxBuffer(
+        data, (uint32_t)size,
+        pdx_image, pdx_image_size,
+        mdx_buffer_, mdx_buffer_size_,
+        pdx_buffer_, pdx_buffer_size_)) {
+    if (pdx_image) ps_free_(pdx_image);
+    return false;
+  }
+
+  if (pdx_image) {
+    ps_free_(pdx_image);
+    pdx_image = nullptr;
+  }
+
+  if (!ensure_context_(mdx_buffer_size_, pdx_buffer_size_, render_sr)) return false;
+
+  if (MXDRV_SetData2(&ctx_, mdx_buffer_, mdx_buffer_size_, pdx_buffer_, pdx_buffer_size_) != 0) return false;
+
+  const bool pdx_loaded = (pdx_buffer_size_ > 0);
+
+  // MXDRV copies data into its own pool; free source buffers to save RAM.
+  if (mdx_buffer_) {
+    ps_free_(mdx_buffer_);
+    mdx_buffer_ = nullptr;
+    mdx_buffer_size_ = 0;
+  }
+  if (pdx_buffer_) {
+    ps_free_(pdx_buffer_);
+    pdx_buffer_ = nullptr;
+    pdx_buffer_size_ = 0;
+  }
+  MXDRV_Play2(&ctx_);
+
+  pdx_loaded_ = pdx_loaded;
   playing_ = true;
   return true;
 }
 
 void MDXPlayer::stop() {
+  if (ctx_ready_) {
+    MXDRV_Stop(&ctx_);
+  }
   playing_ = false;
+}
+
+void MDXPlayer::poll_opm_regs_() {
+  if (!opm_state_ || !ctx_ready_) return;
+  for (int i = 0; i < 256; ++i) {
+    uint8_t val = 0;
+    bool updated = false;
+    if (MxdrvContext_GetOpmReg(&ctx_, (uint8_t)i, &val, &updated) && updated) {
+      opm_state_->on_write((uint8_t)i, val);
+    }
+  }
+  for (int ch = 0; ch < 8; ++ch) {
+    bool current = false;
+    bool logical = false;
+    if (MxdrvContext_GetFmKeyOn(&ctx_, (uint8_t)ch, &current, &logical)) {
+      opm_state_->set_fm_keyon((uint8_t)ch, current, logical);
+    }
+  }
+}
+
+void MDXPlayer::poll_pcm_keyon_() {
+  if (!ctx_ready_) return;
+  uint8_t mask = 0;
+  for (int ch = 0; ch < 8; ++ch) {
+    bool keyon = false;
+    if (MxdrvContext_GetPcmKeyOn(&ctx_, (uint8_t)ch, &keyon) && keyon) {
+      mask |= (uint8_t)(1u << ch);
+    }
+  }
+  pcm_mask_ = mask;
 }
 
 void MDXPlayer::render_mono(int16_t* dst, int n) {
@@ -218,52 +271,35 @@ void MDXPlayer::render_mono(int16_t* dst, int n) {
     return;
   }
 
+  const int block_samples = (int)MDX_RENDER_BLOCK_SAMPLES;
   int remaining = n;
-  int offset = 0;
+  int dst_idx = 0;
+
   while (remaining > 0) {
-    int chunk = pcm_timer_driver_estimate(&timer_, remaining);
-    if (chunk <= 0 || chunk > remaining) chunk = remaining;
-
-    stream_sample_t* bufs[2] = { bufL_.data(), bufR_.data() };
-    ym2151_update_one(&opm_.opm, bufs, chunk);
-
-    if (adpcm_mix_ready_) {
-      memset(pcmL_.data(), 0, sizeof(stream_sample_t) * chunk);
-      memset(pcmR_.data(), 0, sizeof(stream_sample_t) * chunk);
-      adpcm_pcm_mix_driver_run(&adpcm_, pcmL_.data(), pcmR_.data(), chunk);
-    }
+    int chunk = remaining > block_samples ? block_samples : remaining;
+    MXDRV_GetPCM(&ctx_, pcm_interleaved_.data(), chunk);
 
     for (int i = 0; i < chunk; ++i) {
-      int32_t mono = (bufL_[i] + bufR_[i]) / 2;
-      if (adpcm_mix_ready_) {
-        mono += (pcmL_[i] + pcmR_[i]) / 2;
-      }
+      int32_t l = pcm_interleaved_[i * 2];
+      int32_t r = pcm_interleaved_[i * 2 + 1];
+      int32_t mono = (l + r) / 2;
       if (mono > 32767) mono = 32767;
       if (mono < -32768) mono = -32768;
-      dst[offset + i] = (int16_t)mono;
+      dst[dst_idx + i] = (int16_t)mono;
     }
 
-    pcm_timer_driver_advance(&timer_, chunk);
-
+    dst_idx += chunk;
     remaining -= chunk;
-    offset += chunk;
-
-    if (driver_.ended) {
-      playing_ = false;
-      break;
-    }
   }
 
-  for (int i = offset; i < n; ++i) dst[i] = 0;
+  poll_opm_regs_();
+  poll_pcm_keyon_();
+
+  if (MXDRV_GetTerminated(&ctx_)) {
+    playing_ = false;
+  }
 }
 
 uint8_t MDXPlayer::pcm_mask() const {
-  if (!pdx_loaded_) return 0;
-  uint8_t mask = 0;
-  for (int i = 8; i < 16; ++i) {
-    if (driver_.tracks[i].used && driver_.tracks[i].note >= 0) {
-      mask |= (uint8_t)(1u << (i - 8));
-    }
-  }
-  return mask;
+  return pdx_loaded_ ? pcm_mask_ : 0;
 }
