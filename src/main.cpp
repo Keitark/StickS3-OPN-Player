@@ -353,8 +353,8 @@ void loop() {
     if (is_mdx) {
       title = mdx_player.title();
     } else {
-      title = blob.gd3_track_name_en();
-      if (title.empty()) title = blob.gd3_track_name_jp();
+      title = blob.gd3_track_name_jp();
+      if (title.empty()) title = blob.gd3_track_name_en();
     }
     if (title.empty()) title = tracks.empty() ? std::string("(no track)") : tracks.current();
 

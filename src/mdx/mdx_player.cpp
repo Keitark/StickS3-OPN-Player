@@ -1,6 +1,7 @@
 #include "mdx_player.hpp"
 #include "../app_config.hpp"
 #include "../opm/opm_state.hpp"
+#include "../encoding/sjis_utf8.hpp"
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <algorithm>
@@ -134,7 +135,7 @@ bool MDXPlayer::load(uint8_t* data, size_t size, OPMState& state, const char* md
 
   char title_buf[128] = {};
   if (MdxGetTitle(data, (uint32_t)size, title_buf, sizeof(title_buf))) {
-    title_ = title_buf;
+    title_ = sjis_to_utf8(title_buf);
   }
 
   bool has_pdx = false;
