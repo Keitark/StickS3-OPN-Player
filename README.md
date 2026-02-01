@@ -4,11 +4,11 @@
 ![Board](https://img.shields.io/badge/board-M5StickS3-blue)
 
 ## Overview
-This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/VGZ (YM2203/OPN) and MDX (YM2151/OPM) tracks from LittleFS and renders a simple UI with spectrum and chip meters. The target PlatformIO environment is `m5sticks3` (board: `m5stack-stamps3`) using the Arduino framework. MDX playback is OPM-only (no PDX/ADPCM).
+This repository contains firmware for an ESP32-S3 M5Stack device that plays VGM/VGZ (YM2203/OPN) and MDX (YM2151/OPM) tracks from LittleFS and renders a simple UI with spectrum and chip meters. The target PlatformIO environment is `m5sticks3` (board: `m5stack-stamps3`) using the Arduino framework. MDX playback supports PDX/ADPCM when the matching PDX file is present.
 
 ## Features
 - YM2203 (OPN) playback via the YMFM emulator.
-- YM2151 (OPM) MDX playback (no PDX/ADPCM).
+- YM2151 (OPM) MDX playback (PDX/ADPCM supported when PDX is available).
 - LittleFS track browser for `.vgm`/`.vgz`/`.mdx` files.
 - On-device UI: track title, spectrum, and chip activity meters.
 - Button controls for previous/next and volume (on-screen volume indicator while adjusting).
@@ -58,5 +58,5 @@ pio device monitor -b 115200
 ## License Notes (Assessment)
 - YMFM is BSD 3-Clause (fetched via PlatformIO). Keep its copyright and license text in source/binary distributions.
 - PlatformIO dependencies `M5Unified` and `M5GFX` are MIT-licensed; `M5GFX` bundles Adafruit GFX fonts under a BSD-style license. If you distribute binaries, include their notices.
-- MDX playback pulls `mdxtools` (GPL-3.0) via PlatformIO. If you distribute firmware built with it, GPL obligations apply.
+- MDX playback pulls `portable_mdx` via PlatformIO. Yosshin’s code is Apache-2.0, while MXDRVg/X68Sound-derived parts follow their original terms. If you distribute firmware built with it, review and comply with those licenses (see the upstream `readme.md`).
 - Track files in `data/` may be copyrighted. Only distribute audio assets you have rights to.

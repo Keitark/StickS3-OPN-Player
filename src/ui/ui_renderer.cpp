@@ -90,6 +90,12 @@ void UIRenderer::draw(uint32_t now_ms,
   int specH = UI_SPEC_H;
   int partsH = UI_PARTS_H;
   int sepH = UI_SEP_H;
+  int parts = meters.count > 0 ? meters.count : 1;
+  bool pcm = (parts == 16);
+  if (pcm) {
+    specH = UI_SPEC_H - 12;
+    partsH = UI_PARTS_H + 16;
+  }
 
   int specY  = headerH + gap;
   int sepY   = specY + specH;
@@ -286,28 +292,46 @@ canvas_.clearClipRect();
   int inH = ph - 2;
 
   int gapX = 6;
-  int parts = meters.count > 0 ? meters.count : 1;
-  int barW = (inW - gapX*(parts-1)) / parts;
-  if(barW < 10) barW = 10;
+  int rowCount = pcm ? 2 : 1;
+  int barsPerRow = pcm ? 8 : parts;
+  int rowGap = pcm ? 4 : 0;
+  int rowH = (inH - rowGap) / rowCount;
+  if (rowH < 18) rowH = 18;
+
+  int barW = (inW - gapX * (barsPerRow - 1)) / barsPerRow;
+  if (barW < 10) barW = 10;
 
   const char* lab6[6]={"FM1","FM2","FM3","SSG1","SSG2","SSG3"};
   const char* lab8[8]={"FM1","FM2","FM3","FM4","FM5","FM6","FM7","FM8"};
-  const char* const* lab = (parts == 8) ? lab8 : lab6;
-  int label_count = (parts == 8) ? 8 : 6;
-  int draw_parts = parts;
-  if (draw_parts > label_count) draw_parts = label_count;
+  const char* labpcm[8]={"P08","P09","P10","P11","P12","P13","P14","P15"};
 
-  for(int i=0;i<draw_parts;i++){
-    int bx = inX + i*(barW + gapX);
-    int by = inY;
-    int bh = inH - 12;
+  for (int row = 0; row < rowCount; ++row) {
+    int base = row * 8;
+    int by = inY + row * (rowH + rowGap);
+    int bh = rowH - 12;
+    if (bh < 8) bh = 8;
 
-    //canvas_.drawRect(bx, by, barW, bh, COL_FRAME);
-    draw_segment_bar_v_(bx, by, barW, bh, meters.val[i], meters.peak[i], meters.hold[i]);
+    for (int i = 0; i < barsPerRow; ++i) {
+      int idx = base + i;
+      if (idx >= parts) break;
 
-    canvas_.setTextColor(COL_TXT, COL_BG);
-    canvas_.setCursor(bx, inY + inH - 10);
-    canvas_.print(lab[i]);
+      int bx = inX + i * (barW + gapX);
+      draw_segment_bar_v_(bx, by, barW, bh, meters.val[idx], meters.peak[idx], meters.hold[idx]);
+
+      const char* label = nullptr;
+      if (pcm && row == 1) {
+        label = labpcm[i];
+      } else if (parts == 6) {
+        label = lab6[i];
+      } else {
+        label = lab8[i];
+      }
+      if (label) {
+        canvas_.setTextColor(COL_TXT, COL_BG);
+        canvas_.setCursor(bx, by + bh + 2);
+        canvas_.print(label);
+      }
+    }
   }
 
   canvas_.pushSprite(display_, 0, 0);

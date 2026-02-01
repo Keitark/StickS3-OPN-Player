@@ -11,6 +11,7 @@ struct SpectrumState {
 class Spectrum {
 public:
   void reset();
+  void set_bin_scale(float scale);
   void push_pcm_block(const int16_t* pcm, int n);
   void update(uint32_t now_ms);
 
@@ -23,6 +24,7 @@ private:
   float mag32_[32]{};
   SpectrumState st_{};
   uint32_t hold_ms_[32]{};
+  float bin_scale_ = 1.0f;
 
   void compute_();
 };

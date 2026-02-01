@@ -20,6 +20,12 @@ void Spectrum::reset(){
   memset(hold_ms_,0,sizeof(hold_ms_));
 }
 
+void Spectrum::set_bin_scale(float scale){
+  if (scale < 0.1f) scale = 0.1f;
+  if (scale > 1.0f) scale = 1.0f;
+  bin_scale_ = scale;
+}
+
 void Spectrum::push_pcm_block(const int16_t* pcm, int n){
   for(int i=0;i<n;i++){
     ring_[w_ & 1023] = pcm[i];
@@ -44,8 +50,9 @@ void Spectrum::update(uint32_t now_ms){
 
   // 32列 = 32bin (0..31)。DC(0)は見た目いらないので飛ばして使う。
   for(int c=0;c<32;c++){
-    int bin = c;
+    int bin = (int)(c * bin_scale_);
     if (bin == 0) bin = 1;
+    if (bin > 31) bin = 31;
 
     float t = clamp01(db_norm(to_db(mag32_[bin])));
 

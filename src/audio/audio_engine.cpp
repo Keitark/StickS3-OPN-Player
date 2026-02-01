@@ -7,7 +7,7 @@ void AudioEngine::begin(uint32_t sample_rate, uint8_t channel) {
   ch_ = channel;
 }
 
-void AudioEngine::pump(FillFn fill) {
+void AudioEngine::pump(FillFn fill, bool heavy) {
   const uint32_t now = millis();
 
   // 経過分だけ貯金を減らす（雑だけど効く）
@@ -24,13 +24,13 @@ void AudioEngine::pump(FillFn fill) {
   }
 
   // 目標貯金（ms）：重いときは多めが安定
-  const int32_t TARGET_MS = AUDIO_TARGET_BUFFER_MS;
-  const int32_t MIN_MS    = AUDIO_MIN_BUFFER_MS;
+  const int32_t TARGET_MS = heavy ? AUDIO_TARGET_BUFFER_MS_PCM : AUDIO_TARGET_BUFFER_MS;
+  const int32_t MIN_MS    = heavy ? AUDIO_MIN_BUFFER_MS_PCM : AUDIO_MIN_BUFFER_MS;
   const int32_t CHUNK_MS  = (int32_t)((1000LL * AUDIO_BLOCK_SAMPLES) / sr_);
 
   // 1回のpumpで使う時間上限（UIを止めない）
   const uint32_t t0 = micros();
-  const uint32_t BUDGET_US = AUDIO_PUMP_BUDGET_US;
+  const uint32_t BUDGET_US = heavy ? AUDIO_PUMP_BUDGET_US_PCM : AUDIO_PUMP_BUDGET_US;
 
   // 貯金が足りない時だけ詰める。詰めたらその分貯金を増やす。
   while (buffered_ms_ < TARGET_MS) {

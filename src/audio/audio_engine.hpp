@@ -7,7 +7,7 @@ public:
   using FillFn = std::function<void(int16_t* dst, int n)>;
 
   void begin(uint32_t sample_rate, uint8_t channel);
-  void pump(FillFn fill);
+  void pump(FillFn fill, bool heavy);
 
 private:
   uint32_t sr_ = 44100;

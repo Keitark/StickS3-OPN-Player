@@ -5,14 +5,29 @@
 constexpr uint32_t OUT_SR = 44100;
 constexpr size_t   AUDIO_BLOCK_SAMPLES = 1024;
 constexpr uint8_t  AUDIO_CHANNEL = 0;
-// MDX render rate (lower than OUT_SR to reduce YM2151 CPU load)
-constexpr uint32_t MDX_RENDER_SR = 22050;
-constexpr size_t   MDX_RENDER_BLOCK_SAMPLES = 256;
+// MDX render rates (portable_mdx output rate).
+constexpr uint32_t MDX_RENDER_SR_DEFAULT = 22050;
+constexpr uint32_t MDX_RENDER_SR_PCM = 22050;
+// MDX low-pass (Q15). 0 disables. Higher = brighter but more aliasing.
+constexpr int32_t MDX_LPF_ALPHA_Q15 = 22938; // ~0.70
+constexpr bool MDX_ENABLE_PCM = true;
+// Temporary: set true to listen to PCM-only (mute FM/OPM output)
+constexpr bool MDX_PCM_ONLY = false;
+// OPM mix gain (Q15). X68Sound applies its own internal scaling.
+constexpr int32_t MDX_OPM_GAIN_Q15 = 32768; // 1.0
+// PCM mix gain (Q15). We upshift 12-bit to 16-bit (+4) for 1:1 scale.
+constexpr int32_t MDX_PCM_GAIN_Q15 = 32768; // 1.0
+constexpr int32_t MDX_PCM_GAIN_SHIFT = 4;   // +12-bit -> 16-bit
+constexpr size_t   MDX_RENDER_BLOCK_SAMPLES = AUDIO_BLOCK_SAMPLES;
 
 // Audio buffering (ms / us)
 constexpr int32_t  AUDIO_TARGET_BUFFER_MS = 500;
 constexpr int32_t  AUDIO_MIN_BUFFER_MS    = 300;
 constexpr uint32_t AUDIO_PUMP_BUDGET_US   = 12000;
+// Heavier PCM8 mixes need more buffering/budget
+constexpr int32_t  AUDIO_TARGET_BUFFER_MS_PCM = 700;
+constexpr int32_t  AUDIO_MIN_BUFFER_MS_PCM    = 450;
+constexpr uint32_t AUDIO_PUMP_BUDGET_US_PCM   = 20000;
 
 // Speaker config
 constexpr uint16_t SPEAKER_DMA_BUF_LEN   = 1024;
@@ -32,6 +47,7 @@ constexpr int SPEC_COLS = 32;
 
 // UI layout/timing
 constexpr uint32_t UI_FPS_MS = 33;  // 30fps
+constexpr uint32_t UI_FPS_MS_PCM = 50;  // 20fps when PCM8 is active
 constexpr int UI_HEADER_H = 16;
 constexpr int UI_GAP = 4;
 constexpr int UI_SPEC_H = 78;

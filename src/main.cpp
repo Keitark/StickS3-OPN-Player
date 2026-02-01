@@ -54,9 +54,13 @@ static size_t mdx_buf_pos = 0;
 static size_t mdx_buf_len = 0;
 static uint32_t mdx_rs_step_fp = 0;  // 16.16 fixed: mdx_sr/OUT_SR
 static uint32_t mdx_rs_pos_fp = 0;
+static int16_t mdx_rs_s_1 = 0;
 static int16_t mdx_rs_s0 = 0;
 static int16_t mdx_rs_s1 = 0;
+static int16_t mdx_rs_s2 = 0;
 static bool mdx_rs_ready = false;
+static uint32_t mdx_render_sr = MDX_RENDER_SR_DEFAULT;
+static int32_t mdx_lpf_y_q15 = 0;
 
 // ===================== Helpers =====================
 static bool ends_with_i(const std::string& s, const char* suf) {
@@ -80,14 +84,20 @@ static bool load_current_track() {
     opm_state.reset();
     spec.reset();
     mdx_player.stop();
-    if (!mdx_player.load(mdx_blob.data(), mdx_blob.size(), opm_state)) return false;
+    if (!mdx_player.load(mdx_blob.data(), mdx_blob.size(), opm_state, path.c_str())) return false;
     mdx_buf_pos = 0;
     mdx_buf_len = 0;
-    mdx_rs_step_fp = (uint32_t)(((uint64_t)MDX_RENDER_SR << 16) / OUT_SR);
+    mdx_render_sr = mdx_player.render_sample_rate();
+    if (mdx_render_sr == 0) mdx_render_sr = MDX_RENDER_SR_DEFAULT;
+    mdx_rs_step_fp = (uint32_t)(((uint64_t)mdx_render_sr << 16) / OUT_SR);
     mdx_rs_pos_fp = 0;
+    mdx_rs_s_1 = 0;
     mdx_rs_s0 = 0;
     mdx_rs_s1 = 0;
+    mdx_rs_s2 = 0;
     mdx_rs_ready = false;
+    mdx_lpf_y_q15 = 0;
+    spec.set_bin_scale((float)mdx_render_sr / (float)OUT_SR);
     return true;
   }
 
@@ -109,6 +119,7 @@ static bool load_current_track() {
 
   opn_state.reset();
   spec.reset();
+  spec.set_bin_scale(1.0f);
 
   if (!player.load(blob.data(), blob.size(), *chip, opn_state)) return false;
 
@@ -133,6 +144,33 @@ static inline int16_t lerp_i16(int16_t a, int16_t b, uint32_t t16) {
   return (int16_t)v;
 }
 
+static inline int16_t cubic_i16(int16_t s_1, int16_t s0, int16_t s1, int16_t s2, uint32_t t16) {
+  int64_t t = t16;
+  int64_t t2 = (t * t) >> 16;
+  int64_t t3 = (t2 * t) >> 16;
+  int64_t a0 = 2LL * s0;
+  int64_t a1 = (int64_t)(-s_1 + s1);
+  int64_t a2 = (int64_t)(2 * s_1 - 5 * s0 + 4 * s1 - s2);
+  int64_t a3 = (int64_t)(-s_1 + 3 * s0 - 3 * s1 + s2);
+  int64_t y = a0 + ((a1 * t) >> 16) + ((a2 * t2) >> 16) + ((a3 * t3) >> 16);
+  y >>= 1;
+  if (y < -32768) y = -32768;
+  if (y > 32767) y = 32767;
+  return (int16_t)y;
+}
+
+static inline int16_t mdx_lpf(int16_t x) {
+  if (MDX_LPF_ALPHA_Q15 <= 0) return x;
+  int32_t y = mdx_lpf_y_q15;
+  int32_t xq = ((int32_t)x) << 15;
+  y = y + (int32_t)(((int64_t)MDX_LPF_ALPHA_Q15 * (xq - y)) >> 15);
+  mdx_lpf_y_q15 = y;
+  int32_t out = y >> 15;
+  if (out < -32768) out = -32768;
+  if (out > 32767) out = 32767;
+  return (int16_t)out;
+}
+
 static inline int16_t mdx_next_sample() {
   if (!mdx_player.playing()) return 0;
   if (mdx_buf_pos >= mdx_buf_len) {
@@ -140,7 +178,7 @@ static inline int16_t mdx_next_sample() {
     mdx_player.render_mono(mdx_buf.data(), (int)mdx_buf_len);
     mdx_buf_pos = 0;
   }
-  return mdx_buf[mdx_buf_pos++];
+  return mdx_lpf(mdx_buf[mdx_buf_pos++]);
 }
 
 static void init_resampler() {
@@ -156,25 +194,29 @@ static void fill_audio_block(int16_t* dst, int n) {
     if (!mdx_player.playing()) {
       for (int i=0;i<n;i++) dst[i]=0;
     } else {
-      if (MDX_RENDER_SR == OUT_SR) {
+      if (mdx_render_sr == OUT_SR) {
         mdx_player.render_mono(dst, n);
       } else {
         if (mdx_rs_step_fp == 0) {
-          mdx_rs_step_fp = (uint32_t)(((uint64_t)MDX_RENDER_SR << 16) / OUT_SR);
+          mdx_rs_step_fp = (uint32_t)(((uint64_t)mdx_render_sr << 16) / OUT_SR);
         }
         if (!mdx_rs_ready) {
+          mdx_rs_s_1 = mdx_next_sample();
           mdx_rs_s0 = mdx_next_sample();
           mdx_rs_s1 = mdx_next_sample();
+          mdx_rs_s2 = mdx_next_sample();
           mdx_rs_ready = true;
         }
         for (int i = 0; i < n; ++i) {
           mdx_rs_pos_fp += mdx_rs_step_fp;
           while (mdx_rs_pos_fp >= (1u << 16)) {
             mdx_rs_pos_fp -= (1u << 16);
+            mdx_rs_s_1 = mdx_rs_s0;
             mdx_rs_s0 = mdx_rs_s1;
-            mdx_rs_s1 = mdx_next_sample();
+            mdx_rs_s1 = mdx_rs_s2;
+            mdx_rs_s2 = mdx_next_sample();
           }
-          dst[i] = lerp_i16(mdx_rs_s0, mdx_rs_s1, mdx_rs_pos_fp);
+          dst[i] = cubic_i16(mdx_rs_s_1, mdx_rs_s0, mdx_rs_s1, mdx_rs_s2, mdx_rs_pos_fp);
         }
       }
     }
@@ -287,12 +329,21 @@ void loop() {
   if (M5.BtnB.wasClicked()) { tracks.prev(); load_current_track(); }
 
   // audio pump
-  audio.pump(fill_audio_block);
+  const bool pcm_heavy = is_mdx && mdx_player.pdx_loaded();
+  audio.pump(fill_audio_block, pcm_heavy);
 
   // UI 30fps
-  if (now - last_ui >= UI_FPS_MS) {
+  const uint32_t ui_interval = pcm_heavy ? UI_FPS_MS_PCM : UI_FPS_MS;
+  if (now - last_ui >= ui_interval) {
     last_ui = now;
     if (is_mdx) {
+      bool pcm = mdx_player.pdx_loaded();
+      opm_state.set_pcm_enabled(pcm);
+      if (pcm) {
+        opm_state.set_pcm_mask(mdx_player.pcm_mask());
+      } else {
+        opm_state.set_pcm_mask(0);
+      }
       opm_state.update(now);
     } else {
       opn_state.update(now);

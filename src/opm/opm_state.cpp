@@ -10,6 +10,9 @@ void OPMState::reset() {
   memset(reg_, 0, sizeof(reg_));
   memset(keyon_mask_, 0, sizeof(keyon_mask_));
   memset(kick_until_ms_, 0, sizeof(kick_until_ms_));
+  pcm_mask_ = 0;
+  memset(pcm_kick_until_ms_, 0, sizeof(pcm_kick_until_ms_));
+  pcm_enabled_ = false;
   meters_ = {};
   meters_.count = 8;
   memset(hold_ms_, 0, sizeof(hold_ms_));
@@ -27,10 +30,42 @@ void OPMState::on_write(uint8_t reg, uint8_t data) {
   }
 }
 
+void OPMState::set_fm_keyon(uint8_t ch, bool keyon, bool kick) {
+  if (ch >= 8) return;
+  keyon_mask_[ch] = keyon ? 0x0F : 0x00;
+  if (kick) {
+    kick_until_ms_[ch] = (uint32_t)(millis() + 80);
+  }
+}
+
+void OPMState::set_pcm_enabled(bool enabled) {
+  pcm_enabled_ = enabled;
+  meters_.count = enabled ? 16 : 8;
+  if (!enabled) {
+    pcm_mask_ = 0;
+    memset(pcm_kick_until_ms_, 0, sizeof(pcm_kick_until_ms_));
+  }
+}
+
+void OPMState::set_pcm_mask(uint8_t mask) {
+  if (!pcm_enabled_) return;
+  uint8_t rising = mask & ~pcm_mask_;
+  if (rising) {
+    uint32_t now = millis();
+    for (int i = 0; i < 8; ++i) {
+      if (rising & (1u << i)) {
+        pcm_kick_until_ms_[i] = now + 80;
+      }
+    }
+  }
+  pcm_mask_ = mask;
+}
+
 void OPMState::update(uint32_t now_ms) {
   for (int i = 0; i < 8; ++i) {
-    float lv = keyon_mask_[i] ? 0.65f : 0.0f;
-    if (keyon_mask_[i] && now_ms < kick_until_ms_[i]) {
+    bool kicked = now_ms < kick_until_ms_[i];
+    float lv = (keyon_mask_[i] || kicked) ? 0.65f : 0.0f;
+    if (kicked) {
       lv = fminf(1.0f, lv + 0.20f);
     }
 
@@ -48,6 +83,32 @@ void OPMState::update(uint32_t now_ms) {
     } else if (now_ms - hold_ms_[i] > PEAK_HOLD_MS) {
       meters_.hold[i] *= 0.90f;
       meters_.hold[i] = clamp01(meters_.hold[i]);
+    }
+  }
+
+  if (!pcm_enabled_) return;
+
+  for (int i = 0; i < 8; ++i) {
+    int idx = 8 + i;
+    float lv = (pcm_mask_ & (1u << i)) ? 0.65f : 0.0f;
+    if ((pcm_mask_ & (1u << i)) && now_ms < pcm_kick_until_ms_[i]) {
+      lv = fminf(1.0f, lv + 0.20f);
+    }
+
+    float diff = lv - meters_.val[idx];
+    meters_.val[idx] += (diff > 0 ? M_ATTACK : M_RELEASE) * diff;
+    meters_.val[idx] = clamp01(meters_.val[idx]);
+
+    float pd = meters_.val[idx] - meters_.peak[idx];
+    meters_.peak[idx] += (pd > 0 ? 0.55f : 0.20f) * pd;
+    meters_.peak[idx] = clamp01(meters_.peak[idx]);
+
+    if (meters_.peak[idx] > meters_.hold[idx]) {
+      meters_.hold[idx] = meters_.peak[idx];
+      hold_ms_[idx] = now_ms;
+    } else if (now_ms - hold_ms_[idx] > PEAK_HOLD_MS) {
+      meters_.hold[idx] *= 0.90f;
+      meters_.hold[idx] = clamp01(meters_.hold[idx]);
     }
   }
 }
